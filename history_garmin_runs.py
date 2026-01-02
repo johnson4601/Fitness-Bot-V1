@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import csv
 import os
 import sys
+import platform
 import json
 import time
 from dotenv import load_dotenv
@@ -11,14 +12,23 @@ from dotenv import load_dotenv
 # 1. Load configuration
 load_dotenv()
 
-# 2. Safety Check
+# 2. Platform-Aware Safety Check
+# On Raspberry Pi/Linux: Set CHECK_MOUNT_STATUS=True in .env to enable mount verification
+# On Windows: Mount check is automatically skipped (unless explicitly enabled)
 check_mount = os.getenv("CHECK_MOUNT_STATUS", "False").lower() == "true"
 drive_path = os.getenv("DRIVE_MOUNT_PATH", "/home/pi/google_drive")
+is_windows = platform.system() == "Windows"
 
-if check_mount:
+if check_mount and not is_windows:
+    print(f"Safety Check: Verifying mount at {drive_path}...")
     if not os.path.ismount(drive_path):
         print(f"CRITICAL ERROR: Drive is not mounted at {drive_path}.")
+        print("Stopping script to prevent writing to local storage.")
         sys.exit(1)
+    else:
+        print("Safety Check: PASSED. Drive is mounted.")
+elif check_mount and is_windows:
+    print("Note: Mount check skipped on Windows (not applicable).")
 
 # --- CONFIGURATION ---
 TOKEN_DIR = ".garth"

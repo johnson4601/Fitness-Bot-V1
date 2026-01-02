@@ -82,7 +82,10 @@ GARMIN_PASSWORD="your_password"
 # --- PATHS ---
 SAVE_PATH="./data"
 
-# --- RASPBERRY PI SAFETY (Optional) ---
+# --- PLATFORM-SPECIFIC SETTINGS ---
+# Mount Safety Check (Raspberry Pi/Linux only)
+# Set to "True" on Raspberry Pi to verify rclone mount before writing
+# Automatically skipped on Windows - no configuration needed
 CHECK_MOUNT_STATUS="False"
 DRIVE_MOUNT_PATH="/home/pi/google_drive"
 3. Authentication
