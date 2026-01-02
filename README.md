@@ -1,199 +1,49 @@
-![Visitors](https://api.visitorbadge.io/api/visitors?path=johnson4601/Fitness-Bot-V1&label=Visitors&countColor=%2337d67a)
-
-![GitHub stars](https://img.shields.io/github/stars/johnson4601/Fitness-Bot-V1?style=social)
-
-
-Welcome, This is a project that i have been thinking about for a while, giving access to my Gemini Gem Personnel trainer. with these python tools i have automated the information pull into a google drive folder so the Gem has data no older than an hour, allowing me to ask questions about my data and training plans. 
-
-I use the HEVY app, I have added a complete list of the exercises on the app to my gem for creation of workout routines, the GEM will create a JSON that is pasted into the HEVY_Upload python that will upload the plan straight to my account!    
-
-
-
-
-
-AI Fitness Data Pipeline (Garmin + Hevy)
-This project creates a "Cyber-Physical System" for your fitness data. It automatically pulls your biometrics (Garmin) and weightlifting data (Hevy), aggregates them into CSV files, and syncs them to a location of your choice (like Google Drive) for analysis by AI tools like Gemini or ChatGPT.
-
-#🚀 Features
-
-Garmin Biometrics: Tracks Weight, Sleep Score, HRV, Stress, and Body Battery hourly.
-
-Garmin Runs: detailed run analysis including Splits, Pace, HR Zones, and Elevation.
-
-Hevy Integration: Pulls detailed sets, reps, weight, and RPE for every gym session.
-
-Smart Sync: Checks for existing data to prevent duplicates; safe to run hourly.
-
-Secure: Uses environment variables to keep your passwords safe.
-
-#🛠️ Prerequisites
-
-Hevy, a pro membership is required to access to the developer API.
-
-Before you start, you need three things installed on your computer:
-
-Python 3.12+: It would not work on the new version for me.
-
-Crucial: When installing, check the box "Add Python to PATH" at the bottom of the installer.
-
-Google Drive for Desktop (Optional): If you want the files to automatically sync to the cloud for your AI agent.
-
-Git (Optional): To easily download updates.
-
-#📥 Installation
-
-1. Download the Code
-Open your terminal (PowerShell or Command Prompt) and run:
-
-PowerShell
-
-git clone https://github.com/johnson4601/Fitness-Bot-V1.git
-cd Fitness-Bot-V1
-(Or just download the ZIP file from GitHub and unzip it).
-
-2. Install Dependencies
-We need to install the Python libraries that talk to Garmin and Hevy. Run this command in your project folder:
-
-PowerShell
-
-pip install -r requirements.txt
-
-#⚙️ Configuration (The Important Part)
-
-We do not hardcode passwords. We use a special file.
-
-Find the file named .env.example in the folder.
-
-Rename it to .env (remove the .example).
-
-Note: If you don't see file extensions, just rename it so it looks like just .env.
-
-Open .env with Notepad.
-
-Fill in your details:
-
-
-Garmin Credentials
-GARMIN_EMAIL=your_email@example.com
-GARMIN_PASSWORD=your_password
-
-Hevy API Key (Requires Hevy Pro)
-Get this from: https://hevy.com/settings (Developer tab)
-HEVY_API_KEY=your_long_api_key_here
-
-Where should the CSV files be saved?
-Example for Google Drive users:
-SAVE_PATH=G:\My Drive\Gemini Gems\Personal trainer
-Example for local users:
-SAVE_PATH=C:\Users\User\Documents\FitnessData
-
-#🏃‍♂️ First Run & Authentication
-
-1. Login to Garmin
-Garmin requires a one-time secure login to generate session tokens. Run this command:
-
-PowerShell
-
-python direct_login.py
-If successful, it will save a hidden .garth folder. You won't need to log in again for about a year.
-
-2. Backfill Your History
-Let's pull all your past data so your database isn't empty.
-
-PowerShell
-
-Pull lifting history (Since 2023)
-python hevy_history_pull.py
-
-Pull run history (Since 2023)
-python garmin_runs_daily.py
-Check your SAVE_PATH folder. You should see hevy_stats.csv and garmin_runs.csv full of data.
-
-#🤖 Automation (Set it and Forget it)
-
-To have this run automatically every hour, we use Windows Task Scheduler.
-
-The Easy Way (PowerShell Script)
-Open PowerShell as Administrator and copy/paste these blocks to create the tasks instantly.
-
-Task 1: Garmin Biometrics (Hourly)
-
-PowerShell
-
-$Action = New-ScheduledTaskAction -Execute "python.exe" -Argument "garmin_daily_report.py" -WorkingDirectory "C:\Path\To\Fitness-Bot-V1"
-$Trigger = New-ScheduledTaskTrigger -Once -At "11:30PM" -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 36500)
-$Trigger.Repetition.Duration = $null
-Register-ScheduledTask -TaskName "Garmin Daily Pull" -Action $Action -Trigger $Trigger -Force
-(Make sure to replace C:\Path\To\Fitness-Bot-V1 with the actual folder location on your PC).
-
-Task 2: Hevy Lifts (Hourly) Repeat the command above, but change:
-
-Argument: hevy_pull.py
-
-TaskName: "Hevy Daily Pull"
-
-#❓ Troubleshooting
-
-"python is not recognized" You didn't check "Add to PATH" when installing Python. Re-install Python and check that box.
-
-Garmin Login Fails Garmin security is strict. If direct_login.py fails:
-
-Delete the .garth folder if it exists.
-
-Wait 15 minutes.
-
-Try logging in again.
-
-Files not updating Check the logs. Open the .env file and ensure SAVE_PATH points to a folder that actually exists.
-
-Disclaimer: This tool is for personal use. Be mindful of API rate limits. Running scripts more frequently than once every 15-30 minutes may get your IP temporarily restricted by Garmin.
-
-
-#🧠 AI Persona (Gemini Gem / ChatGPT) EXAMPLE
-
-Once your data is syncing to Google Drive, use this prompt to configure your AI Personal Trainer.
-
-Instructions:
-
-Create a new Gemini Gem or ChatGPT Custom GPT.
-
-Upload the garmin_stats.csv, hevy_stats.csv, and garmin_runs.csv files to its knowledge base.
-
-Paste the following into the System Instructions:
-
-**Role & Persona**
-You are an expert Strength and Conditioning Coach specialized in "Hybrid Athlete" preparation (concurrent strength and endurance).
-
-**Your Personality:**
-* **Professional & Strict:** You are data-driven. You do not guess; you analyze.
-* **Charismatic & Playful:** You are flirtatious and complimentary when it fits naturally to reward good data or hard work (e.g., "Good morning, handsome. Impressive lift."), but never at the expense of solid advice.
-* **Tone:** Tough love mixed with genuine affection. Avoid military jargon; speak like a high-level private sector coach.
-
-**Primary Objective:**
-Guide the user through a "Recomposition" phase (Lose Fat, Build Muscle) while improving his 2-mile run time.
-
-**Key Data Sources (Attached Files):**
-You have access to three automatically updated files. **ALWAYS** check these before answering progress questions:
-1.  **`garmin_stats.csv` (Daily Biometrics):** Contains Weight, Sleep Score, HRV Status, Body Battery, and Stress.
-2.  **`hevy_stats.csv` (Lifting Logs):** Contains every set, rep, weight, and RPE for gym sessions.
-3.  **`garmin_runs.csv` (Run Analysis):** Contains specific run metrics like Avg Pace, Heart Rate, and Splits.
-
-**System Instruction: Data Integration Strategy**
-* **Recovery Check (`garmin_stats.csv`):**
-    * Check **"Body Batt High"**. If <75, ask about his energy levels before prescribing heavy volume.
-    * Check **"HRV Status"**. If "Unbalanced" or "Low" for 3+ days, suggest an Active Recovery day.
-    * Check **"Sleep Score"**. <70 requires a "go to bed earlier" scolding.
-* **Strength Check (`hevy_stats.csv`):**
-    * Look for "Progressive Overload" (Weight or Reps trending up) on key lifts (Squat, Bench, Deadlift).
-* **Run Check (`garmin_runs.csv`):**
-    * For the 2-Mile goal, analyze the **"Avg Pace"** column. Compare recent runs to the target pace.
-* **The "Concurrent Session" Rule:** IF a Garmin entry and Hevy entry share a date/time (±15 mins), treat them as a SINGLE session.
-
-**Safety & Lifestyle Context:**
-* **Mental Health/De-load:** If "Avg Stress" in `garmin_stats.csv` is high (>40), suggest his specific hobbies for recovery (Hiking, Photography, working on cars) rather than just "resting."
-* **Sleep:** Watch for overtraining markers (elevated Resting HR > 5 bpm above baseline).
-
-Support
-If you find this project helpful, you can support it here:
-
-Buy Me a Coffee: https://buymeacoffee.com/johnson4601
+🏋️ AI Fitness Data Pipeline (Garmin + Hevy)Automate your training data. Build your own AI Coach.This project creates a "Cyber-Physical System" for your fitness data. It automatically aggregates your biometrics (Garmin) and weightlifting data (Hevy), syncs them to a cloud location (Google Drive), and structures them for analysis by AI agents like Google Gemini or ChatGPT.By feeding this live data into an AI persona, you can generate hyper-personalized workout routines that adapt to your recovery, sleep, and strength progression in real-time.🚀 FeaturesBiometric Sync: Auto-pulls Weight, HRV, Sleep Score, and SpO2 from Garmin.Activity Sync: Logs running metrics (Pace, HR Zones, Training Effect).Strength Log: Archives every set, rep, and RPE from Hevy.AI Integration: Includes a dedicated script (Gemini_Hevy.py) to generate 4-week PPL routines based on your history.Auto-Upload: The AI-generated routine is automatically pushed back to your Hevy app.📂 Project StructurePlaintextAI_Fitness/
+├── .env                     # API Keys and Secrets (You create this)
+├── .garth/                  # Hidden folder for Garmin tokens (Created by script)
+├── setup_garmin_login.py    # Run this ONCE to authenticate
+├── daily_garmin_health.py   # Pulls daily health stats (Sleep/HRV)
+├── daily_garmin_runs.py     # Pulls recent run activities
+├── daily_hevy_workouts.py   # Pulls recent lifting sessions
+├── Gemini_Hevy.py           # The AI Coach (Generates routines)
+├── history_garmin_import.py # Bulk import tool
+└── requirements.txt         # Dependencies
+🛠️ PrerequisitesPython 3.9+Note: Ensure you check "Add Python to PATH" during installation.Hevy Pro Account (Required for API access).Garmin Connect Account.Google Cloud Project (Enabled for Drive API & Gemini API).Google Drive for Desktop (Optional, but recommended for seamless cloud syncing).📥 Installation & Setup1. Clone & InstallBashgit clone https://github.com/johnson4601/AI_Fitness.git
+cd AI_Fitness
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install requests pandas python-dotenv garth garminconnect google-api-python-client google-auth-httplib2 google-auth-oauthlib google-generativeai
+2. Configure Environment (.env)Create a file named .env in the root directory and add your credentials:Ini, TOML# --- API KEYS ---
+HEVY_API_KEY="your_hevy_api_key_here"
+GEMINI_API_KEY="your_google_gemini_api_key_here"
+
+# --- GOOGLE DRIVE ---
+GOOGLE_DRIVE_FOLDER_ID="your_folder_id_here"
+
+# --- GARMIN CREDENTIALS (Initial Setup Only) ---
+GARMIN_EMAIL="your_email@example.com"
+GARMIN_PASSWORD="your_password"
+
+# --- PATHS ---
+SAVE_PATH="./data"
+
+# --- RASPBERRY PI SAFETY (Optional) ---
+CHECK_MOUNT_STATUS="False"
+DRIVE_MOUNT_PATH="/home/pi/google_drive"
+3. AuthenticationStep A: Garmin LoginRun the setup script. This saves a session token so you don't have to log in daily.Bashpython setup_garmin_login.py
+Troubleshooting: If this fails, delete the .garth folder, wait 15 minutes, and try again.Step B: Google DriveDownload your OAuth credentials.json from Google Cloud, place it in the root folder, and run:Bashpython Gemini_Hevy.py
+This will open a browser to authorize access and generate a token.pickle file.🏃‍♂️ Initialization (Backfill Data)Before setting up daily automation, run these importers to build your historical database:Bashpython history_hevy_import.py    # Imports all past lifts
+python history_garmin_import.py  # Imports past health stats
+python history_garmin_runs.py    # Imports past run activities
+🤖 Automation (Cron Jobs)To keep your AI "Brain" updated, set these scripts to run daily.Example Crontab (Linux/Raspberry Pi):Bash# Edit crontab
+crontab -e
+
+# Run every night at 11:00 PM
+0 23 * * * /path/to/venv/bin/python /path/to/AI_Fitness/daily_garmin_health.py >> /var/log/fitness_health.log 2>&1
+5 23 * * * /path/to/venv/bin/python /path/to/AI_Fitness/daily_garmin_runs.py >> /var/log/fitness_runs.log 2>&1
+10 23 * * * /path/to/venv/bin/python /path/to/AI_Fitness/daily_hevy_workouts.py >> /var/log/fitness_hevy.log 2>&1
+🧠 AI Persona Setup (Gemini / ChatGPT)Once your data is live in Google Drive, you can configure a Gemini Gem or Custom GPT to act as your coach.Knowledge Base: Upload garmin_stats.csv, hevy_stats.csv, and garmin_runs.csv.System Instructions: Paste the following prompt into your AI's configuration:Role: You are an expert Strength and Conditioning Coach specialized in Hybrid Athlete preparation.Personality:Strict but Flirtatious: You are data-driven but charismatic. Reward discipline with compliments ("Impressive lift, handsome"), but call out slacking immediately.Objective: Guide the user through a "Recomposition" phase (Lose Fat, Build Muscle) while improving 2-mile run time.Operational Rules:Recovery Matrix: Always scan garmin_stats.csv. If Sleep Score < 70 or HRV is "Unbalanced," strictly prescribe Active Recovery.Progressive Overload: Scan hevy_stats.csv. Ensure weights or reps are trending up on Compound Lifts.Run Pacing: Compare recent "Avg Pace" in garmin_runs.csv against the 2-mile goal.Response Protocol:Always check the CSV files before answering. If data is missing, demand an upload.🐍 Python Tools DescriptionScriptFunctiondaily_garmin_health.pyFetches today's Weight, Sleep, HRV, and Stress.daily_garmin_runs.pyFetches detailed metrics for runs in the last 3 days.daily_hevy_workouts.pySyncs recent lifting sessions and deduplicates sets.Gemini_Hevy.pyThe Brain. Reads CSV history + Hevy Exercise list to generate a 4-week JSON routine and uploads it to Hevy.☕ SupportIf you find this project helpful for your own training:<img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="180" />
