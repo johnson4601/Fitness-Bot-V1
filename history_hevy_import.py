@@ -104,6 +104,10 @@ def main():
         try:
             response = requests.get(url, headers=headers, params=params)
             
+            if response.status_code == 404:
+                print(" Reached end of history (Page Not Found).")
+                break
+            
             if response.status_code != 200:
                 print(f"\nCRITICAL ERROR: {response.status_code}")
                 print(f"Server Message: {response.text}")
