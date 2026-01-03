@@ -230,7 +230,7 @@ Total volume (Weight × Reps × Sets) is calculated per muscle group over 6 mont
 
 ## 📝 License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is open source. do what you want with it.
 
 ---
 
