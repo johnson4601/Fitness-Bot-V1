@@ -238,14 +238,14 @@ This project is open source and available under the [MIT License](LICENSE).
 
 If you find this project helpful for your own training:
 
-[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/yourusername)
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/johnson4601)
 
 ---
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/johnson4601/AI_Fitness/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
 
 ---
 
-**Built with 💪 for the data-driven athlete**
+
