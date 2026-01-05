@@ -55,17 +55,22 @@ def main():
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
 
-    # WRITE HEADERS (Overwrite mode for fresh history)
+    # Store all rows in memory to allow full file rewrites (avoids append mode issues)
+    all_rows = []
+    headers = [
+         "Date", "Time", "activityName", "activityType_typeKey", 
+         "duration", "elapsedDuration", "movingDuration", 
+         "averageSpeed", "averageHR", "maxHR", "steps", 
+         "totalAscent", "totalDescent", "distance", # Added useful cardio metrics
+         "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration", 
+         "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4"
+    ]
+    all_rows.append(headers)
+
+    # WRITE HEADERS (Initial file creation)
     with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow([
-             "Date", "Time", "activityName", "activityType_typeKey", 
-             "duration", "elapsedDuration", "movingDuration", 
-             "averageSpeed", "averageHR", "maxHR", "steps", 
-             "totalAscent", "totalDescent", "distance", # Added useful cardio metrics
-             "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration", 
-             "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4"
-        ])
+        writer.writerows(all_rows)
 
     start = date.fromisoformat(START_DATE)
     end = date.today()
@@ -129,9 +134,13 @@ def main():
             
             if new_rows:
                 new_rows.sort(key=lambda x: x[0])
-                with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
+                all_rows.extend(new_rows)
+                
+                # RE-WRITE FULL FILE (Safe for mounted drives)
+                with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
-                    writer.writerows(new_rows)
+                    writer.writerows(all_rows)
+                    
                 print(f" Saved {len(new_rows)}.")
                 total_saved += len(new_rows)
             else:

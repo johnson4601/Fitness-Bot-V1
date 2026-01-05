@@ -40,7 +40,8 @@ elif check_mount and is_windows:
 
 # --- CONFIGURATION ---
 TOKEN_DIR = os.path.join(SCRIPT_DIR, ".garth")
-CSV_FILE = "garmin_history.csv" # Saving to a separate file to be safe
+SAVE_PATH = os.getenv("SAVE_PATH")
+CSV_FILE = os.path.join(SAVE_PATH, "garmin_history.csv") if SAVE_PATH else "garmin_history.csv"
 START_DATE = "2025-12-01"       # <--- CHANGE THIS DATE to how far back you want to go
 # ---------------------
 
@@ -77,7 +78,9 @@ def main():
     print(f"From {start} to {end}")
     print("Press Ctrl+C to stop at any time.")
     
-    # 3. Create CSV Header
+    # 3. Load Existing Data (for Read-Modify-Write)
+    existing_rows = []
+    
     headers = [
         "Date", 
         "Weight (lbs)", "Muscle Mass (lbs)", "Body Fat %", "Water %",
@@ -87,12 +90,25 @@ def main():
         "Steps", "Step Goal", "Cals Total", "Cals Active",
         "Activities"
     ]
-    
-    # Only write header if file doesn't exist
-    if not os.path.isfile(CSV_FILE):
-        with open(CSV_FILE, mode='w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(headers)
+
+    # Ensure folder exists
+    folder_path = os.path.dirname(CSV_FILE)
+    if folder_path and not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    if os.path.isfile(CSV_FILE):
+        try:
+            with open(CSV_FILE, mode='r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                file_headers = next(reader, None)
+                if file_headers:
+                    # Validate headers match? For now, we assume they do or we just append.
+                    # Ideally we use our standard headers.
+                    pass
+                for row in reader:
+                    existing_rows.append(row)
+        except Exception as e:
+            print(f"Warning reading existing file: {e}")
 
     # 4. The Loop
     while current_date <= end:
@@ -182,9 +198,16 @@ def main():
                 steps, cals_goal, cals_tot, cals_act, act_str
             ]
             
-            with open(CSV_FILE, mode='a', newline='') as f:
+            # Add to memory
+            existing_rows.append(row)
+            # Sort by date
+            existing_rows.sort(key=lambda x: x[0])
+
+            # WRITE FULL FILE (Read-Modify-Write replacement)
+            with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(row)
+                writer.writerow(headers)
+                writer.writerows(existing_rows)
             
             print(" Done.")
 
