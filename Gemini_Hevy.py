@@ -61,7 +61,7 @@ def get_smart_memory_context(file_content_bytes):
 
         # 2. Filter Dated Entries (Recent History Only)
         dated_rows = df[df['Date'].astype(str).str.lower() != 'active'].copy()
-        dated_rows['parsed_date'] = pd.to_datetime(dated_rows['Date'], errors='coerce')
+        dated_rows['parsed_date'] = pd.to_datetime(dated_rows['Date'], format='mixed', errors='coerce')
 
         # Set "Recent" window (e.g., last 60 days)
         cutoff_date = datetime.now() - timedelta(days=60)
@@ -90,13 +90,13 @@ def aggregate_training_data(hevy_stats_df, exercise_db_df, months=6):
         - Total volume per muscle group
         - Exercise-specific PRs
     """
-    # Filter for last N months
-    cutoff_date = datetime.now() - timedelta(days=months * 30)
-    hevy_stats_df['Date'] = pd.to_datetime(hevy_stats_df['Date'])
+    # Filter for last N months (using DateOffset for precision)
+    cutoff_date = datetime.now() - pd.DateOffset(months=months)
+    hevy_stats_df['Date'] = pd.to_datetime(hevy_stats_df['Date'], format='mixed')
     recent_data = hevy_stats_df[hevy_stats_df['Date'] >= cutoff_date].copy()
 
     if recent_data.empty:
-        print("   [!] Warning: No data found in the last 6 months")
+        print(f"   [!] Warning: No data found in the last {months} months")
         return None
 
     # Calculate 1RM for each set
@@ -146,6 +146,81 @@ def aggregate_training_data(hevy_stats_df, exercise_db_df, months=6):
         'date_range': f"{recent_data['Date'].min().strftime('%Y-%m-%d')} to {recent_data['Date'].max().strftime('%Y-%m-%d')}"
     }
 
+def calculate_strength_trends(hevy_stats_df, recent_months=3, history_months=12):
+    """
+    Compare recent 1RM vs all-time 1RM to detect plateaus or regressions.
+    Returns trend analysis per exercise.
+    """
+    now = datetime.now()
+    recent_cutoff = now - pd.DateOffset(months=recent_months)
+    history_cutoff = now - pd.DateOffset(months=history_months)
+
+    df = hevy_stats_df.copy()
+    df['Date'] = pd.to_datetime(df['Date'], format='mixed')
+    df['estimated_1rm'] = df.apply(
+        lambda row: calculate_one_rep_max(row['Weight (lbs)'], row['Reps']), axis=1
+    )
+
+    # Filter to history window
+    df = df[df['Date'] >= history_cutoff]
+
+    if df.empty:
+        return None
+
+    # Recent period (last N months)
+    recent_data = df[df['Date'] >= recent_cutoff]
+    if recent_data.empty:
+        return None
+
+    recent_1rm = recent_data.groupby('Exercise')['estimated_1rm'].max()
+
+    # All-time 1RM within history window
+    all_time_1rm = df.groupby('Exercise')['estimated_1rm'].max()
+
+    # Calculate trend
+    trends = pd.DataFrame({
+        'Recent_1RM': recent_1rm,
+        'AllTime_1RM': all_time_1rm
+    }).dropna()
+
+    if trends.empty:
+        return None
+
+    trends['Trend_Pct'] = ((trends['Recent_1RM'] - trends['AllTime_1RM']) / trends['AllTime_1RM'] * 100).round(1)
+    trends['Status'] = trends['Trend_Pct'].apply(
+        lambda x: 'PLATEAU' if -2 <= x <= 2 else ('REGRESSING' if x < -2 else 'PROGRESSING')
+    )
+
+    return trends.sort_values('Trend_Pct')
+
+def validate_variable_loading(routines_json):
+    """
+    Validates that compound movements use variable loading (not straight sets).
+    Returns list of warnings for exercises with static weights across multiple sets.
+    """
+    warnings = []
+
+    routines = routines_json.get('routines', []) if isinstance(routines_json, dict) else routines_json
+
+    for routine in routines:
+        for exercise in routine.get('exercises', []):
+            sets = exercise.get('sets', [])
+            if len(sets) < 2:
+                continue
+
+            weights = [s.get('weight_kg', 0) for s in sets if s.get('type') == 'normal']
+
+            # Check if all weights are identical (straight sets)
+            if len(set(weights)) == 1 and len(weights) > 1:
+                ex_id = exercise.get('exercise_template_id', 'unknown')
+                warnings.append({
+                    'routine': routine.get('title'),
+                    'exercise_id': ex_id,
+                    'issue': f'Static weight ({weights[0]}kg) across {len(weights)} sets - consider variable loading'
+                })
+
+    return warnings
+
 def get_drive_service():
     creds = None
     if os.path.exists('token.pickle'):
@@ -186,12 +261,15 @@ def fetch_and_save_hevy_exercises():
             
         # Convert to DataFrame
         df = pd.DataFrame(all_exercises)
-        # Keep only what we need
+        # Keep columns needed for aggregation and LLM context
+        required_cols = ['id', 'title', 'primary_muscle_group', 'secondary_muscle_groups', 'equipment', 'type']
+        available_cols = [c for c in required_cols if c in df.columns]
+
         if 'title' in df.columns and 'id' in df.columns:
-            df = df[['id', 'title']]
+            df = df[available_cols]
             # Save locally so we can read it
             df.to_csv("HEVY APP exercises.csv", index=False)
-            print(f"   -> Successfully saved {len(df)} exercises to 'HEVY APP exercises.csv'")
+            print(f"   -> Successfully saved {len(df)} exercises ({len(available_cols)} columns) to 'HEVY APP exercises.csv'")
             return df
         else:
             print("   -> Error: Unexpected data format from Hevy.")
@@ -299,8 +377,8 @@ def generate_monthly_plan():
     # Load exercise database
     if exercise_db:
         df_ex = pd.read_csv(exercise_db)
-        # Limit context size: randomly sample or take top 400 to fit in prompt
-        context_str += f"\nAVAILABLE EXERCISE IDs (Sample):\n{df_ex[['id', 'title']].head(400).to_string()}\n"
+        # Pass FULL exercise database to ensure LLM can map any exercise
+        context_str += f"\nAVAILABLE EXERCISE IDs (FULL LIST - {len(df_ex)} exercises):\n{df_ex[['id', 'title']].to_string()}\n"
 
     # Load and aggregate stats
     if hevy_stats:
@@ -324,6 +402,20 @@ def generate_monthly_plan():
 
                 context_str += "TOP 15 EXERCISE PRs (by Estimated 1RM):\n"
                 context_str += aggregated_stats['exercise_prs'].head(15).to_string() + "\n"
+
+            # Calculate strength trends for plateau detection
+            print("   Calculating strength trends (plateau detection)...")
+            strength_trends = calculate_strength_trends(df_stats, recent_months=3, history_months=12)
+            if strength_trends is not None and not strength_trends.empty:
+                context_str += "\n=== STRENGTH TRENDS (Recent 3mo vs 12mo History) ===\n"
+                context_str += strength_trends.to_string() + "\n"
+                # Highlight exercises needing attention
+                plateaus = strength_trends[strength_trends['Status'] == 'PLATEAU']
+                regressions = strength_trends[strength_trends['Status'] == 'REGRESSING']
+                if not plateaus.empty:
+                    context_str += f"\n[!] PLATEAU DETECTED ({len(plateaus)} exercises): {', '.join(plateaus.index.tolist()[:5])}\n"
+                if not regressions.empty:
+                    context_str += f"\n[!] REGRESSION DETECTED ({len(regressions)} exercises): {', '.join(regressions.index.tolist()[:5])}\n"
         else:
             print("   [!] Skipping aggregations: Exercise database not available")
 
@@ -424,19 +516,34 @@ def post_to_hevy(routines_json):
 
         response = requests.post(url, headers=headers, json=payload)
         # Hevy returns 200 or 201 for success, or the routine data itself
-        if response.status_code in [200, 201] or 'routine' in response.json():
-            routine_data = response.json().get('routine', [{}])
-            routine_id = routine_data[0].get('id', 'unknown') if isinstance(routine_data, list) else routine_data.get('id', 'unknown')
-            print(f"   -> Success! (ID: {routine_id})")
-        else:
-            print(f"   -> Failed: {response.text}")
+        try:
+            response_data = response.json()
+            if response.status_code in [200, 201] or 'routine' in response_data:
+                routine_data = response_data.get('routine', [{}])
+                routine_id = routine_data[0].get('id', 'unknown') if isinstance(routine_data, list) else routine_data.get('id', 'unknown')
+                print(f"   -> Success! (ID: {routine_id})")
+            else:
+                print(f"   -> Failed: {response.text}")
+        except (json.JSONDecodeError, requests.exceptions.JSONDecodeError):
+            print(f"   -> Failed: Invalid JSON response - {response.text[:200]}")
 
 if __name__ == "__main__":
     try:
         if not GEMINI_API_KEY:
-             print("ERROR: GEMINI_API_KEY not found in .env file")
+            print("ERROR: GEMINI_API_KEY not found in .env file")
         else:
             plan = generate_monthly_plan()
+
+            # Validate variable loading in generated plan
+            print("\n--- VALIDATING PLAN ---")
+            loading_warnings = validate_variable_loading(plan)
+            if loading_warnings:
+                print("   [!] Variable Loading Warnings (straight sets detected):")
+                for w in loading_warnings:
+                    print(f"       - {w['routine']}: {w['exercise_id']} - {w['issue']}")
+            else:
+                print("   Variable loading check passed.")
+
             post_to_hevy(plan)
     except Exception as e:
         print(f"\nCRITICAL ERROR: {e}")
