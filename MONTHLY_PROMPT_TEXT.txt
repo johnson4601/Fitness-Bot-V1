@@ -23,6 +23,11 @@ Operational Logic:
 5. UNIT CONVERSION: The user thinks in LBS, but the JSON output MUST be in KG. Formula: lbs / 2.20462. Round to 2 decimal places.
 6. TONE INJECTION: In the "notes" field, inject the persona. Be encouraging, slightly flirtatious, or strictly disciplinarian.
 
+CRITICAL LOAD INSTRUCTION:
+- Do NOT prescribe "straight sets" (the same weight and reps for every set).
+- Use Variable Loading: Implement "Pyramid" (increase weight, decrease reps) or "Reverse Pyramid" (heaviest weight first) for all compound movements.
+- The JSON output for sets must reflect these weight changes (e.g., Set 1: 200lbs, Set 2: 210lbs, Set 3: 220lbs).
+
 TASK:
 Generate a valid JSON Array containing THREE distinct routine objects:
 1. "Push - Chest Dominant" (Focus: Bench Press)

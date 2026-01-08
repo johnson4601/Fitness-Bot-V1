@@ -102,17 +102,18 @@ def main():
     page = 1
     total_sets = 0
     keep_going = True
-    
+    all_new_rows = []  # Collect all rows first
+
     # 3. Fetch Loop
     while keep_going:
         print(f"Fetching Page {page}...", end="", flush=True)
-        
+
         url = "https://api.hevyapp.com/v1/workouts"
         params = {"page": page, "pageSize": 10}
-        
+
         try:
             response = requests.get(url, headers=headers, params=params)
-            
+
             if response.status_code != 200:
                 print(f"\nCRITICAL ERROR: {response.status_code}")
                 print(f"Server Message: {response.text}")
@@ -120,25 +121,25 @@ def main():
 
             data = response.json()
             workouts = data.get('workouts', [])
-            
+
             if not workouts:
                 print(" No more workouts found. Done.")
                 break
-                
-            new_rows = []
-            
+
+            page_rows = []
+
             for workout in workouts:
                 w_date_str = workout.get('start_time')
                 if not w_date_str: continue
 
                 w_dt = datetime.fromisoformat(w_date_str).replace(tzinfo=None)
-                
+
                 # Check Date Limit (stop if before start date)
                 if w_dt < START_DATE_OBJ:
                     print(f"\nReached {w_dt.date()}. Stopping (before {START_DATE}).")
                     keep_going = False
                     break
-                
+
                 w_date_clean = w_dt.strftime("%Y-%m-%d")
                 w_title = workout.get('title', 'Unknown Workout')
 
@@ -146,7 +147,7 @@ def main():
                 for exercise in exercises:
                     ex_name = exercise.get('title', 'Unknown Exercise')
                     sets = exercise.get('sets', [])
-                    
+
                     for i, s in enumerate(sets):
                         # SAFE GETS
                         weight_kg = s.get('weight_kg', 0)
@@ -164,24 +165,30 @@ def main():
                             s.get('rpe', ''),
                             s_type
                         ]
-                        new_rows.append(row)
+                        page_rows.append(row)
 
-            # 4. Save to CSV
-            if new_rows:
-                with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
-                    writer = csv.writer(f)
-                    writer.writerows(new_rows)
-                print(f" Saved {len(new_rows)} sets.")
-                total_sets += len(new_rows)
+            if page_rows:
+                all_new_rows.extend(page_rows)
+                print(f" Found {len(page_rows)} sets.")
+                total_sets += len(page_rows)
             else:
                 print(" (Page empty).")
 
             page += 1
-            time.sleep(0.5) 
-            
+            time.sleep(0.5)
+
         except Exception as e:
             print(f"\nGlobal Error: {e}")
             break
+
+    # 4. Save to CSV (sorted newest to oldest)
+    if all_new_rows:
+        # Sort by date descending (newest first)
+        all_new_rows.sort(key=lambda x: x[0], reverse=True)
+        with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerows(all_new_rows)
+        print(f"Saved {total_sets} sets (sorted newest to oldest).")
 
     print(f"--- COMPLETE. Total Sets Saved: {total_sets} ---")
 

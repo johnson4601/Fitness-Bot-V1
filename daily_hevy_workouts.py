@@ -153,17 +153,26 @@ def main():
                     ]
                     new_rows.append(row)
 
-        # 3. SAVE ONLY NEW ROWS
+        # 3. SAVE WITH SORTING (newest to oldest)
         if new_rows:
-            # Ensure headers exist if new file
-            is_new_file = not os.path.isfile(CSV_FILE)
-            
-            with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
+            # Read existing rows
+            existing_rows = []
+            if os.path.isfile(CSV_FILE):
+                with open(CSV_FILE, mode='r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    next(reader, None)  # Skip header
+                    existing_rows = list(reader)
+
+            # Combine and sort by date descending (newest first)
+            all_rows = existing_rows + new_rows
+            all_rows.sort(key=lambda x: x[0] if x else '', reverse=True)
+
+            # Rewrite entire file
+            with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                if is_new_file:
-                     writer.writerow(["Date", "Workout", "Exercise", "Set", "Weight (lbs)", "Reps", "RPE", "Type"])
-                writer.writerows(new_rows)
-            print(f"SUCCESS: Added {len(new_rows)} new sets. (Skipped {skipped_count} duplicates)")
+                writer.writerow(["Date", "Workout", "Exercise", "Set", "Weight (lbs)", "Reps", "RPE", "Type"])
+                writer.writerows(all_rows)
+            print(f"SUCCESS: Added {len(new_rows)} new sets. (Skipped {skipped_count} duplicates) [Sorted newest to oldest]")
         else:
             print(f"No *new* sets found. (Skipped {skipped_count} duplicates)")
 

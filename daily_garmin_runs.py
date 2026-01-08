@@ -147,22 +147,31 @@ def main():
                 ])
         
         if new_rows:
-            # Check if file exists to determine if we write headers
-            is_new = not os.path.isfile(CSV_FILE)
-            
-            with open(CSV_FILE, mode='a', newline='', encoding='utf-8') as f:
+            # Read existing rows
+            existing_rows = []
+            if os.path.isfile(CSV_FILE):
+                with open(CSV_FILE, mode='r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    next(reader, None)  # Skip header
+                    existing_rows = list(reader)
+
+            # Combine and sort by date/time descending (newest first)
+            all_rows = existing_rows + new_rows
+            all_rows.sort(key=lambda x: (x[0], x[1]) if len(x) > 1 else ('', ''), reverse=True)
+
+            # Rewrite entire file
+            with open(CSV_FILE, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                if is_new:
-                     writer.writerow([
-                         "Date", "Time", "activityName", "activityType_typeKey", 
-                         "duration", "elapsedDuration", "movingDuration", 
-                         "averageSpeed", "averageHR", "maxHR", "steps", 
-                         "summarizedExerciseSets", "totalSets", "activeSets", "totalReps", 
-                         "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration", 
-                         "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4"
-                     ])
-                writer.writerows(new_rows)
-            print(f"SUCCESS: Added {len(new_rows)} new activities.")
+                writer.writerow([
+                    "Date", "Time", "activityName", "activityType_typeKey",
+                    "duration", "elapsedDuration", "movingDuration",
+                    "averageSpeed", "averageHR", "maxHR", "steps",
+                    "summarizedExerciseSets", "totalSets", "activeSets", "totalReps",
+                    "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration",
+                    "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4"
+                ])
+                writer.writerows(all_rows)
+            print(f"SUCCESS: Added {len(new_rows)} new activities. [Sorted newest to oldest]")
         else:
             print("No new activities found.")
 

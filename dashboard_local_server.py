@@ -164,7 +164,8 @@ def load_hevy_data():
         return None
     try:
         df = pd.read_csv(HEVY_STATS_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
+        # Handle mixed date formats (ISO and US format)
+        df['Date'] = pd.to_datetime(df['Date'], format='mixed', dayfirst=False)
         df['primary_muscle_group'] = df['Exercise'].apply(get_muscle_group)
         df['is_cardio'] = df['Exercise'].apply(is_cardio_exercise)
         df['Volume'] = df['Weight (lbs)'].fillna(0) * df['Reps'].fillna(0)
@@ -199,7 +200,8 @@ def load_garmin_runs():
         return None
     try:
         df = pd.read_csv(GARMIN_RUNS_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
+        # Handle mixed date formats (ISO and US format)
+        df['Date'] = pd.to_datetime(df['Date'], format='mixed', dayfirst=False)
         return df
     except Exception as e:
         st.error(f"Error loading Garmin runs data: {e}")
@@ -570,21 +572,41 @@ with tab1:
         if filtered_hevy.empty:
             st.warning("No workout data found for the selected date range.")
         else:
+            # Calculate previous period for comparison
+            period_days = (end_datetime - start_datetime).days + 1
+            prev_start = start_datetime - pd.Timedelta(days=period_days)
+            prev_end = start_datetime - pd.Timedelta(seconds=1)
+            prev_mask = (hevy_df['Date'] >= prev_start) & (hevy_df['Date'] <= prev_end)
+            prev_hevy = hevy_df[prev_mask].copy()
+
             # Metric Cards
             col1, col2, col3, col4 = st.columns(4)
 
-            # Count unique workout sessions (unique Date + Workout combinations)
+            # Current period metrics
             total_workouts = filtered_hevy.groupby(['Date', 'Workout']).ngroups
             total_volume = filtered_hevy['Volume'].sum()
             total_sets = len(filtered_hevy)
             unique_exercises = filtered_hevy['Exercise'].nunique()
 
+            # Previous period metrics for comparison
+            prev_workouts = prev_hevy.groupby(['Date', 'Workout']).ngroups if not prev_hevy.empty else 0
+            prev_volume = prev_hevy['Volume'].sum() if not prev_hevy.empty else 0
+            prev_sets = len(prev_hevy) if not prev_hevy.empty else 0
+
+            # Calculate deltas
+            delta_workouts = total_workouts - prev_workouts if prev_workouts > 0 else None
+            delta_volume = total_volume - prev_volume if prev_volume > 0 else None
+            delta_sets = total_sets - prev_sets if prev_sets > 0 else None
+
             with col1:
-                st.metric("Total Workouts", total_workouts)
+                st.metric("Total Workouts", total_workouts,
+                         delta=f"{delta_workouts:+d}" if delta_workouts is not None else None)
             with col2:
-                st.metric("Total Volume", f"{total_volume:,.0f} lbs")
+                st.metric("Total Volume", f"{total_volume:,.0f} lbs",
+                         delta=f"{delta_volume:+,.0f}" if delta_volume is not None else None)
             with col3:
-                st.metric("Total Sets", total_sets)
+                st.metric("Total Sets", total_sets,
+                         delta=f"{delta_sets:+d}" if delta_sets is not None else None)
             with col4:
                 st.metric("Unique Exercises", unique_exercises)
 
@@ -614,15 +636,15 @@ with tab1:
 
                 # Add trend line if enabled
                 if show_trend_lines and len(weekly_agg) >= 3:
-                    # Calculate rolling average for smooth trend
-                    window = min(4, len(weekly_agg))
-                    weekly_agg['Trend'] = weekly_agg['Volume'].rolling(window=window, center=True, min_periods=1).mean()
+                    # Use exponential weighted moving average for smoother trend
+                    span = max(4, len(weekly_agg) // 3)
+                    weekly_agg['Trend'] = weekly_agg['Volume'].ewm(span=span, adjust=False).mean()
                     fig_volume.add_trace(go.Scatter(
                         x=weekly_agg['Week'],
                         y=weekly_agg['Trend'],
                         mode='lines',
-                        name='Trend (4-week avg)',
-                        line=dict(color='#e5c07b', dash='dash', width=2)
+                        name='Trend',
+                        line=dict(color='#e5c07b', width=3, shape='spline')
                     ))
 
                 fig_volume.update_layout(
@@ -802,9 +824,17 @@ with tab2:
         if filtered_garmin.empty:
             st.warning("No Garmin data found for the selected date range.")
         else:
+            # Calculate previous period for comparison
+            period_days = (end_datetime - start_datetime).days + 1
+            prev_start = start_datetime - pd.Timedelta(days=period_days)
+            prev_end = start_datetime - pd.Timedelta(seconds=1)
+            prev_mask = (garmin_df['Date'] >= prev_start) & (garmin_df['Date'] <= prev_end)
+            prev_garmin = garmin_df[prev_mask].copy()
+
             # Metric Cards
             col1, col2, col3, col4 = st.columns(4)
 
+            # Current period metrics
             avg_sleep = filtered_garmin['Sleep Score'].mean()
 
             # Calculate HRV properly - check if column exists and has any non-null values
@@ -817,14 +847,34 @@ with tab2:
             avg_rhr = filtered_garmin['RHR'].mean() if 'RHR' in filtered_garmin.columns else None
             avg_steps = filtered_garmin['Steps'].mean() if 'Steps' in filtered_garmin.columns else None
 
+            # Previous period metrics
+            prev_sleep = prev_garmin['Sleep Score'].mean() if not prev_garmin.empty else None
+            prev_hrv = None
+            if not prev_garmin.empty and 'HRV Avg' in prev_garmin.columns:
+                prev_hrv_values = prev_garmin['HRV Avg'].dropna()
+                prev_hrv = prev_hrv_values.mean() if not prev_hrv_values.empty else None
+            prev_rhr = prev_garmin['RHR'].mean() if not prev_garmin.empty and 'RHR' in prev_garmin.columns else None
+            prev_steps = prev_garmin['Steps'].mean() if not prev_garmin.empty and 'Steps' in prev_garmin.columns else None
+
+            # Calculate deltas
+            delta_sleep = avg_sleep - prev_sleep if pd.notna(avg_sleep) and pd.notna(prev_sleep) else None
+            delta_hrv = avg_hrv - prev_hrv if avg_hrv is not None and prev_hrv is not None else None
+            delta_rhr = avg_rhr - prev_rhr if pd.notna(avg_rhr) and pd.notna(prev_rhr) else None
+            delta_steps = avg_steps - prev_steps if pd.notna(avg_steps) and pd.notna(prev_steps) else None
+
             with col1:
-                st.metric("Avg Sleep Score", f"{avg_sleep:.1f}" if pd.notna(avg_sleep) else "N/A")
+                st.metric("Avg Sleep Score", f"{avg_sleep:.1f}" if pd.notna(avg_sleep) else "N/A",
+                         delta=f"{delta_sleep:+.1f}" if delta_sleep is not None else None)
             with col2:
-                st.metric("Avg HRV", f"{avg_hrv:.1f}" if avg_hrv is not None and pd.notna(avg_hrv) else "No data")
+                st.metric("Avg HRV", f"{avg_hrv:.1f}" if avg_hrv is not None and pd.notna(avg_hrv) else "No data",
+                         delta=f"{delta_hrv:+.1f}" if delta_hrv is not None else None)
             with col3:
-                st.metric("Avg RHR", f"{avg_rhr:.1f} bpm" if avg_rhr is not None and pd.notna(avg_rhr) else "N/A")
+                st.metric("Avg RHR", f"{avg_rhr:.1f} bpm" if avg_rhr is not None and pd.notna(avg_rhr) else "N/A",
+                         delta=f"{delta_rhr:+.1f}" if delta_rhr is not None else None,
+                         delta_color="inverse")  # Lower RHR is better
             with col4:
-                st.metric("Avg Steps", f"{avg_steps:,.0f}" if avg_steps is not None and pd.notna(avg_steps) else "N/A")
+                st.metric("Avg Steps", f"{avg_steps:,.0f}" if avg_steps is not None and pd.notna(avg_steps) else "N/A",
+                         delta=f"{delta_steps:+,.0f}" if delta_steps is not None else None)
 
             st.markdown("---")
 
@@ -850,15 +900,15 @@ with tab2:
 
                     # Add trend line if enabled
                     if show_trend_lines and len(weight_data) >= 3:
-                        window = min(7, len(weight_data))
                         weight_data = weight_data.sort_values('Date')
-                        weight_data['Trend'] = weight_data['Weight (lbs)'].rolling(window=window, center=True, min_periods=1).mean()
+                        span = max(7, len(weight_data) // 4)
+                        weight_data['Trend'] = weight_data['Weight (lbs)'].ewm(span=span, adjust=False).mean()
                         fig_weight.add_trace(go.Scatter(
                             x=weight_data['Date'],
                             y=weight_data['Trend'],
                             mode='lines',
-                            name='Trend (7-day avg)',
-                            line=dict(color='#c678dd', dash='dash', width=2)
+                            name='Trend',
+                            line=dict(color='#c678dd', width=3, shape='spline')
                         ))
 
                     fig_weight.update_layout(
@@ -892,14 +942,14 @@ with tab2:
 
                     # Add sleep trend line
                     if show_trend_lines and len(sleep_data) >= 3:
-                        window = min(7, len(sleep_data))
-                        sleep_data['Sleep_Trend'] = sleep_data['Sleep Score'].rolling(window=window, center=True, min_periods=1).mean()
+                        span = max(7, len(sleep_data) // 4)
+                        sleep_data['Sleep_Trend'] = sleep_data['Sleep Score'].ewm(span=span, adjust=False).mean()
                         fig_recovery.add_trace(go.Scatter(
                             x=sleep_data['Date'],
                             y=sleep_data['Sleep_Trend'],
                             mode='lines',
                             name='Sleep Trend',
-                            line=dict(color='#98c379', dash='dash', width=2),
+                            line=dict(color='#98c379', width=3, shape='spline'),
                             yaxis='y'
                         ))
 
@@ -918,14 +968,14 @@ with tab2:
 
                         # Add HRV trend line
                         if show_trend_lines and len(hrv_data) >= 3:
-                            window = min(7, len(hrv_data))
-                            hrv_data['HRV_Trend'] = hrv_data['HRV Avg'].rolling(window=window, center=True, min_periods=1).mean()
+                            span = max(7, len(hrv_data) // 4)
+                            hrv_data['HRV_Trend'] = hrv_data['HRV Avg'].ewm(span=span, adjust=False).mean()
                             fig_recovery.add_trace(go.Scatter(
                                 x=hrv_data['Date'],
                                 y=hrv_data['HRV_Trend'],
                                 mode='lines',
                                 name='HRV Trend',
-                                line=dict(color='#61afef', dash='dash', width=2),
+                                line=dict(color='#61afef', width=3, shape='spline'),
                                 yaxis='y2'
                             ))
 
