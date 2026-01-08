@@ -1,0 +1,34 @@
+MIT License
+
+Copyright (c) 2026 [Your Name]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+ADDITIONAL DISCLAIMERS
+
+1. Medical Disclaimer
+This software generates physical training plans based on data inputs. The creators of this software are not medical professionals. The generated workouts are for informational purposes only and should not replace professional medical advice or a personal trainer's supervision. Consult a physician before starting any new exercise program.
+
+2. Third-Party Affiliation
+This project is an independent open-source tool and is NOT affiliated with, endorsed by, or associated with Garmin Ltd., Hevy, or Google. "Garmin" and "Hevy" are trademarks of their respective owners.
+
+3. API Usage & Terms of Service
+This software utilizes unofficial methods (web scraping) to access certain data. Users are responsible for ensuring their use of this software complies with the Terms of Service of Garmin Connect, Hevy, and Google Gemini. The authors assume no liability for account bans or API revocations resulting from the use of this software.
