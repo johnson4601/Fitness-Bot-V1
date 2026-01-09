@@ -423,9 +423,43 @@ def get_next_run(interval, sched):
     return target
 
 
+def get_last_scheduled_run(interval, sched):
+    """Calculate when the task was last supposed to run"""
+    now = datetime.now()
+    if interval == 'hourly':
+        target = now.replace(minute=sched.get('minute', 0), second=0, microsecond=0)
+        if target > now:
+            target -= timedelta(hours=1)
+    elif interval == 'daily':
+        target = now.replace(hour=sched.get('hour', 0), minute=sched.get('minute', 0), second=0, microsecond=0)
+        if target > now:
+            target -= timedelta(days=1)
+    elif interval == 'weekly':
+        cron_dow = sched.get('dow', 0)
+        target_dow = (cron_dow - 1) % 7
+        target = now.replace(hour=sched.get('hour', 0), minute=sched.get('minute', 0), second=0, microsecond=0)
+        days_back = (now.weekday() - target_dow) % 7
+        target -= timedelta(days=days_back)
+        if target > now:
+            target -= timedelta(days=7)
+    elif interval == 'monthly':
+        target = now.replace(day=sched.get('day', 1), hour=sched.get('hour', 0),
+                            minute=sched.get('minute', 0), second=0, microsecond=0)
+        if target > now:
+            # Go back to previous month
+            if now.month == 1:
+                target = target.replace(year=now.year - 1, month=12)
+            else:
+                target = target.replace(month=now.month - 1)
+    else:
+        target = now
+    return target
+
+
 def analyze_task(name, config):
     filepath = config['path']
     interval = config['interval']
+    sched = config['sched']
 
     if filepath and os.path.exists(filepath):
         mod_ts = os.path.getmtime(filepath)
@@ -441,29 +475,52 @@ def analyze_task(name, config):
         seconds_ago = 999999999
         exists = False
 
-    status = "STALE"
-    color = "red"
+    # Calculate next and last scheduled run times
+    next_dt = get_next_run(interval, sched)
+    last_scheduled = get_last_scheduled_run(interval, sched)
 
-    if exists:
-        if interval == 'hourly':
-            if seconds_ago < 172800:
-                status, color = "UPDATED", "green"
-        elif interval == 'daily':
-            if seconds_ago < 259200:
-                status, color = "UPDATED", "green"
-        elif interval == 'weekly':
-            if seconds_ago < 1209600:
-                status, color = "UPDATED", "green"
-        elif interval == 'monthly':
-            if seconds_ago < 5184000:
-                status, color = "UPDATED", "green"
+    # Time since last scheduled run
+    time_since_scheduled = (datetime.now() - last_scheduled).total_seconds()
+
+    # Grace periods (in seconds)
+    GRACE_PERIOD = 24 * 3600  # 24 hours grace before "STALE"
+    OUTDATED_PERIOD = 48 * 3600  # 48 hours before "OUTDATED"
+
+    status = "STALE"
+    color = "orange"
+
+    # Special handling for Hevy Ticker (LED display process)
+    if name == "Hevy Ticker":
+        if not exists:
+            status, color = "NO LOG", "gray"
+        elif seconds_ago < 7200:  # Updated within 2 hours
+            status, color = "ACTIVE", "green"
+        elif seconds_ago < 14400:  # 2-4 hours
+            status, color = "CHECK", "orange"
+        else:  # More than 4 hours
+            status, color = "INACTIVE", "red"
+    # Standard scheduled task logic
+    elif exists:
+        # Did it run after the last scheduled time?
+        ran_on_schedule = dt_mod >= last_scheduled - timedelta(minutes=5)
+
+        if ran_on_schedule:
+            status, color = "UPDATED", "green"
+        elif time_since_scheduled < GRACE_PERIOD:
+            status, color = "WAITING", "blue"
+        elif time_since_scheduled < OUTDATED_PERIOD:
+            status, color = "STALE", "orange"
+        else:
+            status, color = "OUTDATED", "red"
     else:
         status = last_run_str
         color = "gray"
 
-    next_dt = get_next_run(interval, config['sched'])
+    # Format next run string
     if next_dt.date() == datetime.now().date():
         next_run_str = f"Today {next_dt.strftime('%H:%M')}"
+    elif next_dt.date() == (datetime.now() + timedelta(days=1)).date():
+        next_run_str = f"Tomorrow {next_dt.strftime('%H:%M')}"
     else:
         next_run_str = next_dt.strftime("%b %d %H:%M")
 
@@ -515,8 +572,10 @@ st.markdown("""
         border-radius: 8px;
         border: 1px solid #282c34;
     }
-    .status-updated { color: #4caf50; font-weight: bold; }
-    .status-stale { color: #f44336; font-weight: bold; }
+    .status-green { color: #4caf50; font-weight: bold; }
+    .status-blue { color: #2196f3; font-weight: bold; }
+    .status-orange { color: #ff9800; font-weight: bold; }
+    .status-red { color: #f44336; font-weight: bold; }
     .status-gray { color: #7f8c8d; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
@@ -551,6 +610,17 @@ st.sidebar.info(f"Showing data from {start_date} to {end_date}")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Chart Options")
 show_trend_lines = st.sidebar.checkbox("Show Trend Lines", value=True, help="Overlay smooth average trend lines on charts")
+
+# Mission Status filter
+st.sidebar.markdown("---")
+st.sidebar.subheader("Mission Status")
+all_tasks = list(TRACKED_FILES.keys())
+selected_tasks = st.sidebar.multiselect(
+    "Tasks to Display",
+    options=all_tasks,
+    default=all_tasks,
+    help="Select which tasks to show in Mission Status"
+)
 
 # --- MAIN CONTENT ---
 st.title("Fitness Command Center")
@@ -1060,15 +1130,20 @@ with tab3:
     # Mission Status
     st.header("Mission Status")
 
-    tasks = [analyze_task(name, conf) for name, conf in TRACKED_FILES.items()]
+    # Filter tasks based on sidebar selection
+    filtered_tracked = {k: v for k, v in TRACKED_FILES.items() if k in selected_tasks}
+    tasks = [analyze_task(name, conf) for name, conf in filtered_tracked.items()]
 
-    # Create task table
-    task_cols = st.columns([2, 2, 2, 1, 1])
-    task_cols[0].markdown("**Task**")
-    task_cols[1].markdown("**Last Update**")
-    task_cols[2].markdown("**Next Run**")
-    task_cols[3].markdown("**Status**")
-    task_cols[4].markdown("**Action**")
+    if not tasks:
+        st.info("No tasks selected. Use the sidebar to choose which tasks to display.")
+    else:
+        # Create task table
+        task_cols = st.columns([2, 2, 2, 1, 1])
+        task_cols[0].markdown("**Task**")
+        task_cols[1].markdown("**Last Update**")
+        task_cols[2].markdown("**Next Run**")
+        task_cols[3].markdown("**Status**")
+        task_cols[4].markdown("**Action**")
 
     for task in tasks:
         cols = st.columns([2, 2, 2, 1, 1])
@@ -1076,15 +1151,9 @@ with tab3:
         cols[1].write(task['last_run'])
         cols[2].write(task['next_run'])
 
-        if task['color'] == 'green':
-            cols[3].markdown(f"<span class='status-updated'>{task['status']}</span>",
-                             unsafe_allow_html=True)
-        elif task['color'] == 'red':
-            cols[3].markdown(f"<span class='status-stale'>{task['status']}</span>",
-                             unsafe_allow_html=True)
-        else:
-            cols[3].markdown(f"<span class='status-gray'>{task['status']}</span>",
-                             unsafe_allow_html=True)
+        # Use color class directly from task
+        cols[3].markdown(f"<span class='status-{task['color']}'>{task['status']}</span>",
+                         unsafe_allow_html=True)
 
         if cols[4].button("Run", key=f"run_{task['name']}"):
             if task['command']:
