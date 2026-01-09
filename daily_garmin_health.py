@@ -91,6 +91,48 @@ def main():
         except:
             rhr, min_hr, max_hr, stress_avg, steps, vo2_max, spo2_avg, respiration_avg, cals_total, cals_active, cals_goal = [None] * 11
 
+        # 1b. Try dedicated endpoints for missing metrics
+        # SpO2
+        if spo2_avg is None:
+            try:
+                spo2_data = api.get_spo2_data(today)
+                if spo2_data:
+                    spo2_avg = get_safe(spo2_data, 'averageSpO2')
+                    if spo2_avg is None:
+                        spo2_avg = get_safe(spo2_data, 'latestSpO2')
+                    if spo2_avg is None:
+                        spo2_avg = get_safe(spo2_data, 'latestSpO2Value')
+            except:
+                pass
+
+        # Respiration
+        if respiration_avg is None:
+            try:
+                resp_data = api.get_respiration_data(today)
+                if resp_data:
+                    respiration_avg = get_safe(resp_data, 'avgWakingRespirationValue')
+                    if respiration_avg is None:
+                        respiration_avg = get_safe(resp_data, 'avgSleepRespirationValue')
+            except:
+                pass
+
+        # VO2 Max - try fitness stats
+        if vo2_max is None:
+            try:
+                if hasattr(api, 'get_max_metrics'):
+                    max_metrics = api.get_max_metrics(today)
+                    if max_metrics:
+                        # Look for VO2 max in various locations
+                        for metric in max_metrics if isinstance(max_metrics, list) else [max_metrics]:
+                            if get_safe(metric, 'generic', 'vo2MaxPreciseValue'):
+                                vo2_max = get_safe(metric, 'generic', 'vo2MaxPreciseValue')
+                                break
+                            if get_safe(metric, 'vo2MaxPreciseValue'):
+                                vo2_max = get_safe(metric, 'vo2MaxPreciseValue')
+                                break
+            except:
+                pass
+
         # 2. Sleep
         try:
             sleep_data = api.get_sleep_data(today)
@@ -107,10 +149,24 @@ def main():
 
         # 3. Training Status
         training_status = None
+        t_status = None
         try:
             if hasattr(api, 'get_training_status'):
                 t_status = api.get_training_status(today)
-                training_status = get_safe(t_status, 'mostRecentTerminatedTrainingStatus', 'status') 
+                # Try multiple paths for training status
+                training_status = get_safe(t_status, 'mostRecentTerminatedTrainingStatus', 'status')
+                if training_status is None:
+                    training_status = get_safe(t_status, 'trainingStatusData', 'status')
+                if training_status is None:
+                    training_status = get_safe(t_status, 'status')
+                if training_status is None and isinstance(t_status, list) and len(t_status) > 0:
+                    training_status = get_safe(t_status[0], 'status')
+
+                # Also try to get VO2 max from training status if still missing
+                if vo2_max is None and t_status:
+                    vo2_max = get_safe(t_status, 'vo2MaxValue')
+                    if vo2_max is None:
+                        vo2_max = get_safe(t_status, 'mostRecentTerminatedTrainingStatus', 'vo2MaxValue')
         except:
             pass
 
@@ -136,12 +192,46 @@ def main():
                 h = api.get_hrv_data(today)
             else:
                 h = api.connectapi(f"/hrv-service/hrv/daily/{today}")
+
             hrv_status = get_safe(h, 'hrvSummary', 'status')
+
+            # Try multiple HRV value sources in order of preference
             hrv_avg = get_safe(h, 'hrvSummary', 'weeklyAverage')
+            if hrv_avg is None:
+                hrv_avg = get_safe(h, 'hrvSummary', 'lastNightAvg')
+            if hrv_avg is None:
+                hrv_avg = get_safe(h, 'lastNightAvg')
+            if hrv_avg is None:
+                # Try to get from HRV values array
+                hrv_values = get_safe(h, 'hrvValues')
+                if hrv_values and len(hrv_values) > 0:
+                    # Get the most recent HRV reading
+                    hrv_avg = get_safe(hrv_values[-1], 'hrvValue')
+            if hrv_avg is None:
+                hrv_avg = get_safe(h, 'hrvValue')
+        except Exception as e:
+            print(f"HRV fetch error: {e}")
+
+        # 6. Blood Pressure
+        bp_systolic, bp_diastolic = None, None
+        try:
+            if hasattr(api, 'get_blood_pressure'):
+                bp_data = api.get_blood_pressure(today)
+            else:
+                bp_data = api.connectapi(f"/bloodpressure/{today}")
+
+            if bp_data:
+                summaries = get_safe(bp_data, 'measurementSummaries')
+                if summaries and len(summaries) > 0:
+                    # Try to get from measurements array first (most accurate)
+                    measurements = get_safe(summaries[0], 'measurements')
+                    if measurements and len(measurements) > 0:
+                        bp_systolic = get_safe(measurements[0], 'systolic')
+                        bp_diastolic = get_safe(measurements[0], 'diastolic')
         except:
             pass
 
-        # 6. Activities
+        # 7. Activities
         activity_str = ""
         try:
             activities = api.get_activities_by_date(today, today)
@@ -158,6 +248,7 @@ def main():
             sleep_total, sleep_deep, sleep_rem, sleep_score,
             rhr, min_hr, max_hr, stress_avg, respiration_avg, spo2_avg,
             vo2_max, training_status, hrv_status, hrv_avg,
+            bp_systolic, bp_diastolic,
             steps, cals_goal, cals_total, cals_active,
             activity_str
         ]
@@ -168,6 +259,7 @@ def main():
             "Sleep Total (hr)", "Sleep Deep (hr)", "Sleep REM (hr)", "Sleep Score",
             "RHR", "Min HR", "Max HR", "Avg Stress", "Respiration", "SpO2",
             "VO2 Max", "Training Status", "HRV Status", "HRV Avg",
+            "BP Systolic", "BP Diastolic",
             "Steps", "Step Goal", "Cals Total", "Cals Active",
             "Activities"
         ]
