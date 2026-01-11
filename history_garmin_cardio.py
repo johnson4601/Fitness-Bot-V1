@@ -58,12 +58,13 @@ def main():
     # Store all rows in memory to allow full file rewrites (avoids append mode issues)
     all_rows = []
     headers = [
-         "Date", "Time", "activityName", "activityType_typeKey", 
-         "duration", "elapsedDuration", "movingDuration", 
-         "averageSpeed", "averageHR", "maxHR", "steps", 
+         "Date", "Time", "activityName", "activityType_typeKey",
+         "duration", "elapsedDuration", "movingDuration",
+         "averageSpeed", "averageHR", "maxHR", "steps",
          "totalAscent", "totalDescent", "distance", # Added useful cardio metrics
-         "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration", 
-         "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4"
+         "trainingEffectLabel", "activityTrainingLoad", "minActivityLapDuration",
+         "hrTimeInZone_1", "hrTimeInZone_2", "hrTimeInZone_3", "hrTimeInZone_4",
+         "avgPower", "maxPower", "normPower"
     ]
     all_rows.append(headers)
 
@@ -125,11 +126,17 @@ def main():
                     z3 = act.get('hrTimeInZone_3')
                     z4 = act.get('hrTimeInZone_4')
 
+                    # Power metrics
+                    avg_power = act.get('avgPower')
+                    max_power = act.get('maxPower')
+                    norm_power = act.get('normPower')
+
                     new_rows.append([
                         date_str, time_str, title, atype_key,
                         dur, elapsed, moving, avg_spd, avg_hr, max_hr, steps,
                         ascent, descent, dist,
-                        te_lbl, load, min_lap, z1, z2, z3, z4
+                        te_lbl, load, min_lap, z1, z2, z3, z4,
+                        avg_power, max_power, norm_power
                     ])
             
             if new_rows:

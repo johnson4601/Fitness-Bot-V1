@@ -709,7 +709,7 @@ with tab1:
                 filtered_runs = runs_df[runs_mask].copy()
 
                 if not filtered_runs.empty:
-                    # Cardio metrics
+                    # Cardio metrics - First row
                     cardio_col1, cardio_col2, cardio_col3, cardio_col4 = st.columns(4)
 
                     total_runs = len(filtered_runs)
@@ -734,6 +734,34 @@ with tab1:
                         st.metric("Avg Heart Rate", f"{avg_hr:.0f} bpm" if pd.notna(avg_hr) else "N/A")
                     with cardio_col4:
                         st.metric("Avg Duration", f"{avg_duration:.1f} min" if pd.notna(avg_duration) else "N/A")
+
+                    # Power metrics - Second row
+                    power_col1, power_col2, power_col3, power_col4 = st.columns(4)
+
+                    avg_power = filtered_runs['avgPower'].mean() if 'avgPower' in filtered_runs.columns and filtered_runs['avgPower'].notna().any() else None
+                    max_power = filtered_runs['maxPower'].max() if 'maxPower' in filtered_runs.columns and filtered_runs['maxPower'].notna().any() else None
+                    avg_norm_power = filtered_runs['normPower'].mean() if 'normPower' in filtered_runs.columns and filtered_runs['normPower'].notna().any() else None
+
+                    # Calculate power-to-weight ratio if we have both power and weight data
+                    if avg_power and garmin_df is not None and 'Weight (lbs)' in garmin_df.columns:
+                        # Get most recent weight in kg
+                        recent_weight_lbs = garmin_df[garmin_df['Weight (lbs)'].notna()]['Weight (lbs)'].iloc[-1] if not garmin_df[garmin_df['Weight (lbs)'].notna()].empty else None
+                        if recent_weight_lbs:
+                            recent_weight_kg = recent_weight_lbs * 0.453592
+                            power_to_weight = avg_power / recent_weight_kg
+                        else:
+                            power_to_weight = None
+                    else:
+                        power_to_weight = None
+
+                    with power_col1:
+                        st.metric("Avg Power", f"{avg_power:.0f}W" if avg_power else "No data")
+                    with power_col2:
+                        st.metric("Max Power", f"{max_power:.0f}W" if max_power else "No data")
+                    with power_col3:
+                        st.metric("Avg Norm Power", f"{avg_norm_power:.0f}W" if avg_norm_power else "No data")
+                    with power_col4:
+                        st.metric("Power/Weight", f"{power_to_weight:.2f} W/kg" if power_to_weight else "No data")
 
                     # Cardio charts
                     cardio_chart_col1, cardio_chart_col2 = st.columns(2)
@@ -804,6 +832,97 @@ with tab1:
                         )
                         fig_pace.update_traces(line_color='#e06c75', marker_color='#e5c07b')
                         st.plotly_chart(fig_pace, use_container_width=True)
+
+                    # Power Progression Charts
+                    if 'avgPower' in filtered_runs.columns and filtered_runs['avgPower'].notna().any():
+                        st.subheader("Power Metrics")
+                        power_chart_col1, power_chart_col2 = st.columns(2)
+
+                        with power_chart_col1:
+                            # Power progression over time
+                            power_data = filtered_runs[filtered_runs['avgPower'].notna()].copy()
+                            if not power_data.empty:
+                                fig_power = go.Figure()
+
+                                # Average power line
+                                fig_power.add_trace(go.Scatter(
+                                    x=power_data['Date'],
+                                    y=power_data['avgPower'],
+                                    mode='lines+markers',
+                                    name='Avg Power',
+                                    line=dict(color='#61afef'),
+                                    marker=dict(color='#98c379')
+                                ))
+
+                                # Normalized power line
+                                if 'normPower' in power_data.columns and power_data['normPower'].notna().any():
+                                    fig_power.add_trace(go.Scatter(
+                                        x=power_data['Date'],
+                                        y=power_data['normPower'],
+                                        mode='lines+markers',
+                                        name='Norm Power',
+                                        line=dict(color='#e5c07b', dash='dash'),
+                                        marker=dict(color='#e06c75')
+                                    ))
+
+                                fig_power.update_layout(
+                                    title="Power Output Progression",
+                                    xaxis_title="Date",
+                                    yaxis_title="Power (Watts)",
+                                    template="plotly_dark",
+                                    height=350,
+                                    legend=dict(x=0.5, y=1.1, xanchor='center', orientation='h')
+                                )
+                                st.plotly_chart(fig_power, use_container_width=True)
+
+                        with power_chart_col2:
+                            # Power-to-Weight ratio over time if weight data available
+                            if garmin_df is not None and 'Weight (lbs)' in garmin_df.columns:
+                                power_data_with_weight = power_data.merge(
+                                    garmin_df[['Date', 'Weight (lbs)']].dropna(),
+                                    on='Date',
+                                    how='left'
+                                )
+                                # Fill forward weight data
+                                power_data_with_weight['Weight (lbs)'] = power_data_with_weight['Weight (lbs)'].fillna(method='ffill')
+                                power_data_with_weight['Weight (kg)'] = power_data_with_weight['Weight (lbs)'] * 0.453592
+                                power_data_with_weight['W/kg'] = power_data_with_weight['avgPower'] / power_data_with_weight['Weight (kg)']
+
+                                if power_data_with_weight['W/kg'].notna().any():
+                                    fig_wkg = go.Figure()
+
+                                    # W/kg line
+                                    fig_wkg.add_trace(go.Scatter(
+                                        x=power_data_with_weight['Date'],
+                                        y=power_data_with_weight['W/kg'],
+                                        mode='lines+markers',
+                                        name='Power/Weight',
+                                        line=dict(color='#c678dd'),
+                                        marker=dict(color='#56b6c2')
+                                    ))
+
+                                    # Add target line for Alpe du Zwift goal (2.3 W/kg)
+                                    fig_wkg.add_hline(
+                                        y=2.3,
+                                        line_dash="dash",
+                                        line_color="red",
+                                        annotation_text="Alpe Target (2.3 W/kg)",
+                                        annotation_position="right"
+                                    )
+
+                                    fig_wkg.update_layout(
+                                        title="Power-to-Weight Ratio (W/kg)",
+                                        xaxis_title="Date",
+                                        yaxis_title="W/kg",
+                                        template="plotly_dark",
+                                        height=350,
+                                        legend=dict(x=0.5, y=1.1, xanchor='center', orientation='h')
+                                    )
+                                    st.plotly_chart(fig_wkg, use_container_width=True)
+                                else:
+                                    st.info("Weight data needed to calculate power-to-weight ratio")
+                            else:
+                                st.info("Weight data needed to calculate power-to-weight ratio")
                 else:
                     st.info("No running data found for the selected date range.")
             else:
