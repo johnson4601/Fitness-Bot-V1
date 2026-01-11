@@ -105,7 +105,7 @@ def main():
         try:
             with open(CSV_FILE, mode='r', newline='', encoding='utf-8') as f:
                 reader = csv.reader(f)
-                headers = next(reader, None)
+                _csv_header = next(reader, None)  # Skip header row
                 for row in reader:
                     if row:
                         # Create unique key: date, workout, exercise, set number
@@ -162,7 +162,8 @@ def main():
                 w_date_str = workout.get('start_time')
                 if not w_date_str: continue
 
-                w_dt = datetime.fromisoformat(w_date_str).replace(tzinfo=None)
+                # Convert UTC to local time before extracting the date
+                w_dt = datetime.fromisoformat(w_date_str).astimezone().replace(tzinfo=None)
 
                 # Check Date Limit (stop if before start date)
                 if w_dt < START_DATE_OBJ:

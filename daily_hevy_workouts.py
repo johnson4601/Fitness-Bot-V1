@@ -117,7 +117,8 @@ def main():
             w_date_str = workout.get('start_time')
             if not w_date_str: continue
 
-            w_dt = datetime.fromisoformat(w_date_str).replace(tzinfo=None)
+            # Convert UTC to local time before extracting the date
+            w_dt = datetime.fromisoformat(w_date_str).astimezone().replace(tzinfo=None)
             
             if w_dt < cutoff_date:
                 continue
