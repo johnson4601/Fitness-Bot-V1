@@ -774,36 +774,102 @@ with tab1:
 
             runs_df = load_garmin_runs()
             if runs_df is not None:
+                # Distance unit toggle
+                distance_unit = st.radio(
+                    "Distance Unit",
+                    options=["Kilometers", "Miles"],
+                    horizontal=True,
+                    key="cardio_distance_unit"
+                )
+                use_miles = distance_unit == "Miles"
+                km_to_miles = 0.621371
+
                 # Filter by date range
                 runs_mask = (runs_df['Date'] >= start_datetime) & (runs_df['Date'] <= end_datetime)
                 filtered_runs = runs_df[runs_mask].copy()
 
                 if not filtered_runs.empty:
+                    # Calculate previous period for comparison (trend arrows)
+                    period_days = (end_datetime - start_datetime).days + 1
+                    prev_start = start_datetime - pd.Timedelta(days=period_days)
+                    prev_end = start_datetime - pd.Timedelta(seconds=1)
+                    prev_runs_mask = (runs_df['Date'] >= prev_start) & (runs_df['Date'] <= prev_end)
+                    prev_runs = runs_df[prev_runs_mask].copy()
+
                     # Cardio metrics
-                    cardio_col1, cardio_col2, cardio_col3, cardio_col4 = st.columns(4)
+                    cardio_col1, cardio_col2, cardio_col3, cardio_col4, cardio_col5 = st.columns(5)
 
                     total_runs = len(filtered_runs)
+                    prev_total_runs = len(prev_runs) if not prev_runs.empty else 0
+
                     # Calculate distance from speed and duration if distance column doesn't exist
                     if 'distance' in filtered_runs.columns:
-                        total_distance = filtered_runs['distance'].sum() / 1000  # Convert to km
+                        total_distance_km = filtered_runs['distance'].sum() / 1000
                     elif 'averageSpeed' in filtered_runs.columns and 'duration' in filtered_runs.columns:
-                        # distance = speed * time (speed in m/s, duration in seconds)
                         filtered_runs['distance_calc'] = filtered_runs['averageSpeed'] * filtered_runs['duration']
-                        total_distance = filtered_runs['distance_calc'].sum() / 1000  # Convert to km
+                        total_distance_km = filtered_runs['distance_calc'].sum() / 1000
                     else:
-                        total_distance = 0
+                        total_distance_km = 0
+
+                    # Previous period distance
+                    if not prev_runs.empty:
+                        if 'distance' in prev_runs.columns:
+                            prev_distance_km = prev_runs['distance'].sum() / 1000
+                        elif 'averageSpeed' in prev_runs.columns and 'duration' in prev_runs.columns:
+                            prev_runs['distance_calc'] = prev_runs['averageSpeed'] * prev_runs['duration']
+                            prev_distance_km = prev_runs['distance_calc'].sum() / 1000
+                        else:
+                            prev_distance_km = 0
+                    else:
+                        prev_distance_km = 0
+
+                    # Calculate average distance per run
+                    avg_distance_km = total_distance_km / total_runs if total_runs > 0 else 0
+                    prev_avg_distance_km = prev_distance_km / prev_total_runs if prev_total_runs > 0 else 0
 
                     avg_hr = filtered_runs['averageHR'].mean() if 'averageHR' in filtered_runs.columns else 0
-                    avg_duration = filtered_runs['duration'].mean() / 60 if 'duration' in filtered_runs.columns else 0  # Convert to minutes
+                    prev_avg_hr = prev_runs['averageHR'].mean() if not prev_runs.empty and 'averageHR' in prev_runs.columns else None
+
+                    avg_duration = filtered_runs['duration'].mean() / 60 if 'duration' in filtered_runs.columns else 0
+                    prev_avg_duration = prev_runs['duration'].mean() / 60 if not prev_runs.empty and 'duration' in prev_runs.columns else None
+
+                    # Convert to display units
+                    if use_miles:
+                        total_distance = total_distance_km * km_to_miles
+                        prev_distance = prev_distance_km * km_to_miles
+                        avg_distance = avg_distance_km * km_to_miles
+                        prev_avg_distance = prev_avg_distance_km * km_to_miles
+                        dist_unit = "mi"
+                    else:
+                        total_distance = total_distance_km
+                        prev_distance = prev_distance_km
+                        avg_distance = avg_distance_km
+                        prev_avg_distance = prev_avg_distance_km
+                        dist_unit = "km"
+
+                    # Calculate deltas
+                    delta_runs = total_runs - prev_total_runs if prev_total_runs > 0 else None
+                    delta_distance = total_distance - prev_distance if prev_distance > 0 else None
+                    delta_avg_distance = avg_distance - prev_avg_distance if prev_avg_distance > 0 else None
+                    delta_hr = avg_hr - prev_avg_hr if prev_avg_hr is not None and pd.notna(prev_avg_hr) else None
+                    delta_duration = avg_duration - prev_avg_duration if prev_avg_duration is not None and pd.notna(prev_avg_duration) else None
 
                     with cardio_col1:
-                        st.metric("Total Runs", total_runs)
+                        st.metric("Total Runs", total_runs,
+                                 delta=f"{delta_runs:+d}" if delta_runs is not None else None)
                     with cardio_col2:
-                        st.metric("Total Distance", f"{total_distance:.1f} km")
+                        st.metric("Total Distance", f"{total_distance:.1f} {dist_unit}",
+                                 delta=f"{delta_distance:+.1f}" if delta_distance is not None else None)
                     with cardio_col3:
-                        st.metric("Avg Heart Rate", f"{avg_hr:.0f} bpm" if pd.notna(avg_hr) else "N/A")
+                        st.metric("Avg Run Distance", f"{avg_distance:.2f} {dist_unit}",
+                                 delta=f"{delta_avg_distance:+.2f}" if delta_avg_distance is not None else None)
                     with cardio_col4:
-                        st.metric("Avg Duration", f"{avg_duration:.1f} min" if pd.notna(avg_duration) else "N/A")
+                        st.metric("Avg Heart Rate", f"{avg_hr:.0f} bpm" if pd.notna(avg_hr) else "N/A",
+                                 delta=f"{delta_hr:+.0f}" if delta_hr is not None else None,
+                                 delta_color="inverse")
+                    with cardio_col5:
+                        st.metric("Avg Duration", f"{avg_duration:.1f} min" if pd.notna(avg_duration) else "N/A",
+                                 delta=f"{delta_duration:+.1f}" if delta_duration is not None else None)
 
                     # Cardio charts
                     cardio_chart_col1, cardio_chart_col2 = st.columns(2)
@@ -812,17 +878,21 @@ with tab1:
                         # Distance over time
                         if 'averageSpeed' in filtered_runs.columns and 'duration' in filtered_runs.columns:
                             filtered_runs['distance_km'] = (filtered_runs['averageSpeed'] * filtered_runs['duration']) / 1000
+                            if use_miles:
+                                filtered_runs['distance_display'] = filtered_runs['distance_km'] * km_to_miles
+                            else:
+                                filtered_runs['distance_display'] = filtered_runs['distance_km']
                             fig_distance = px.bar(
                                 filtered_runs,
                                 x='Date',
-                                y='distance_km',
+                                y='distance_display',
                                 title="Running Distance Over Time",
                                 color='averageHR',
                                 color_continuous_scale='Reds'
                             )
                             fig_distance.update_layout(
                                 xaxis_title="Date",
-                                yaxis_title="Distance (km)",
+                                yaxis_title=f"Distance ({dist_unit})",
                                 template="plotly_dark",
                                 height=350
                             )
@@ -857,18 +927,25 @@ with tab1:
 
                     # Speed/Pace trend
                     if 'averageSpeed' in filtered_runs.columns:
-                        # Convert m/s to min/km (pace)
+                        # Convert m/s to pace (min/km or min/mi)
                         filtered_runs['pace_min_km'] = 1000 / (filtered_runs['averageSpeed'] * 60)
+                        if use_miles:
+                            # Convert min/km to min/mi (1 mile = 1.60934 km)
+                            filtered_runs['pace_display'] = filtered_runs['pace_min_km'] * 1.60934
+                            pace_unit = "min/mi"
+                        else:
+                            filtered_runs['pace_display'] = filtered_runs['pace_min_km']
+                            pace_unit = "min/km"
                         fig_pace = px.line(
                             filtered_runs,
                             x='Date',
-                            y='pace_min_km',
+                            y='pace_display',
                             markers=True,
                             title="Running Pace Trend (lower is faster)"
                         )
                         fig_pace.update_layout(
                             xaxis_title="Date",
-                            yaxis_title="Pace (min/km)",
+                            yaxis_title=f"Pace ({pace_unit})",
                             template="plotly_dark",
                             height=300
                         )
