@@ -36,13 +36,14 @@ SAVE_PATH = os.getenv("SAVE_PATH")
 CSV_FILE = os.path.join(SAVE_PATH, "garmin_runs.csv") if SAVE_PATH else "garmin_runs.csv"
 DEFAULT_START_DATE = "2024-08-08"
 
-# Parse command line arguments
-# Usage: python history_garmin_runs.py [start_date] [--force]
-#   start_date: Optional start date (default: 2024-08-08)
-#   --force: Overwrite existing data with fresh Garmin data (re-sync all)
-START_DATE = DEFAULT_START_DATE
+# Try to read start date from .env first, then use default
+START_DATE = os.getenv("GARMIN_START_DATE", DEFAULT_START_DATE)
 FORCE_MODE = False
 
+# Parse command line arguments (command-line overrides .env)
+# Usage: python history_garmin_runs.py [start_date] [--force]
+#   start_date: Optional start date (overrides .env GARMIN_START_DATE)
+#   --force: Overwrite existing data with fresh Garmin data (re-sync all)
 for arg in sys.argv[1:]:
     if arg == "--force":
         FORCE_MODE = True

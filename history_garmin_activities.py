@@ -47,10 +47,11 @@ SAVE_PATH = os.getenv("SAVE_PATH")
 CSV_FILE = os.path.join(SAVE_PATH, "garmin_activities.csv") if SAVE_PATH else "garmin_activities.csv"
 DEFAULT_START_DATE = "2024-08-08"
 
-# Parse command line arguments
-START_DATE = DEFAULT_START_DATE
+# Try to read start date from .env first, then use default
+START_DATE = os.getenv("GARMIN_START_DATE", DEFAULT_START_DATE)
 FORCE_MODE = False
 
+# Parse command line arguments (command-line overrides .env)
 for arg in sys.argv[1:]:
     if arg == "--force":
         FORCE_MODE = True

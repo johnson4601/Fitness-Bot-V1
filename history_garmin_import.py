@@ -49,15 +49,16 @@ else:
 TOKEN_DIR = ".garth"
 DEFAULT_START_DATE = "2024-08-08"
 
-# Parse command line arguments
-# Usage: python history_garmin_import.py [start_date] [--backfill] [--force]
-#   start_date: Optional start date (default: 2024-08-08)
-#   --backfill: Update existing rows with missing data (e.g., new columns like BP)
-#   --force: Overwrite existing data with fresh Garmin data (re-sync all)
-START_DATE = DEFAULT_START_DATE
+# Try to read start date from .env first, then use default
+START_DATE = os.getenv("GARMIN_START_DATE", DEFAULT_START_DATE)
 BACKFILL_MODE = False
 FORCE_MODE = False
 
+# Parse command line arguments (command-line overrides .env)
+# Usage: python history_garmin_import.py [start_date] [--backfill] [--force]
+#   start_date: Optional start date (overrides .env GARMIN_START_DATE)
+#   --backfill: Update existing rows with missing data (e.g., new columns like BP)
+#   --force: Overwrite existing data with fresh Garmin data (re-sync all)
 for arg in sys.argv[1:]:
     if arg == "--backfill":
         BACKFILL_MODE = True

@@ -779,6 +779,7 @@ with tab1:
             st.subheader("Cardio Training (All Activities)")
 
             activities_df = load_garmin_activities()
+            garmin_df = load_garmin_data()  # Load for power-to-weight calculation
             if activities_df is not None:
                 # Sport filter and distance unit controls
                 filter_col1, filter_col2 = st.columns([1, 2])
@@ -835,8 +836,12 @@ with tab1:
                     period_days = (end_datetime - start_datetime).days + 1
                     prev_start = start_datetime - pd.Timedelta(days=period_days)
                     prev_end = start_datetime - pd.Timedelta(seconds=1)
-                    prev_runs_mask = (runs_df['Date'] >= prev_start) & (runs_df['Date'] <= prev_end)
-                    prev_runs = runs_df[prev_runs_mask].copy()
+                    prev_runs_mask = (activities_df['Date'] >= prev_start) & (activities_df['Date'] <= prev_end)
+                    prev_runs = activities_df[prev_runs_mask].copy()
+
+                    # Apply same sport filter to previous period for accurate comparison
+                    if sport_filter != 'All' and 'sportType' in prev_runs.columns:
+                        prev_runs = prev_runs[prev_runs['sportType'] == sport_filter].copy()
 
                     # Cardio metrics
                     cardio_col1, cardio_col2, cardio_col3, cardio_col4, cardio_col5 = st.columns(5)
@@ -916,6 +921,34 @@ with tab1:
                     with cardio_col5:
                         st.metric("Avg Duration", f"{avg_duration:.1f} min" if pd.notna(avg_duration) else "N/A",
                                  delta=f"{delta_duration:+.1f}" if delta_duration is not None else None)
+
+                    # Power metrics - Second row
+                    power_col1, power_col2, power_col3, power_col4 = st.columns(4)
+
+                    avg_power = filtered_runs['avgPower'].mean() if 'avgPower' in filtered_runs.columns and filtered_runs['avgPower'].notna().any() else None
+                    max_power = filtered_runs['maxPower'].max() if 'maxPower' in filtered_runs.columns and filtered_runs['maxPower'].notna().any() else None
+                    avg_norm_power = filtered_runs['normPower'].mean() if 'normPower' in filtered_runs.columns and filtered_runs['normPower'].notna().any() else None
+
+                    # Calculate power-to-weight ratio if we have both power and weight data
+                    if avg_power and garmin_df is not None and 'Weight (lbs)' in garmin_df.columns:
+                        # Get most recent weight in kg
+                        recent_weight_lbs = garmin_df[garmin_df['Weight (lbs)'].notna()]['Weight (lbs)'].iloc[-1] if not garmin_df[garmin_df['Weight (lbs)'].notna()].empty else None
+                        if recent_weight_lbs:
+                            recent_weight_kg = recent_weight_lbs * 0.453592
+                            power_to_weight = avg_power / recent_weight_kg
+                        else:
+                            power_to_weight = None
+                    else:
+                        power_to_weight = None
+
+                    with power_col1:
+                        st.metric("Avg Power", f"{avg_power:.0f}W" if avg_power else "No data")
+                    with power_col2:
+                        st.metric("Max Power", f"{max_power:.0f}W" if max_power else "No data")
+                    with power_col3:
+                        st.metric("Avg Norm Power", f"{avg_norm_power:.0f}W" if avg_norm_power else "No data")
+                    with power_col4:
+                        st.metric("Power/Weight", f"{power_to_weight:.2f} W/kg" if power_to_weight else "No data")
 
                     # Cardio charts
                     cardio_chart_col1, cardio_chart_col2 = st.columns(2)
